@@ -62,3 +62,78 @@ class HH(AbstractAPI):
     def clear_vacancies(self) -> None:
         """Очищает список вакансий."""
         self._vacancies = []
+
+    def get_employer(self, employer_id: int) -> dict:
+        """
+        Получает информацию о работодателе по его ID на HH.ru,
+        возвращает словарь с данными о работодателе.
+        """
+        try:
+            url = f"https://api.hh.ru/employers/{employer_id}"
+            response = requests.get(url, headers=self._headers)
+            response.raise_for_status()
+
+            return response.json()
+
+        except requests.RequestException as e:
+            print(f"Ошибка при получении данных о работодателе {employer_id}: {e}")
+            return {}
+
+    def get_employer_vacancies(self, employer_id: int) -> list:
+        """
+        Получает ВСЕ вакансии конкретного работодателя.
+        """
+        try:
+            url = f"https://api.hh.ru/vacancies?employer_id={employer_id}"
+
+            vacancies = []
+            page = 0
+            per_page = 100
+
+            print(f"Загрузка вакансий работодателя ID: {employer_id}")
+
+            while True:
+                params = {
+                    'employer_id': employer_id,
+                    'page': page,
+                    'per_page': per_page,
+                    'only_with_salary': False  # Все вакансии, даже без зарплаты
+                }
+
+                response = requests.get(self._url, headers=self._headers, params=params, timeout=10)
+                response.raise_for_status()
+
+                data = response.json()
+                items = data.get('items', [])
+
+                if not items:
+                    print(f"   Страница {page}: нет вакансий")
+                    break
+
+                print(f"   Страница {page}: получено {len(items)} вакансий")
+
+                # ФИЛЬТРУЕМ: только от этого работодателя
+                filtered = []
+                for item in items:
+                    item_employer = item.get('employer', {})
+                    if str(item_employer.get('id')) == str(employer_id):
+                        filtered.append(item)
+
+                vacancies.extend(filtered)
+
+                if len(filtered) != len(items):
+                    print(f"      Из них от работодателя: {len(filtered)}")
+
+                # Проверяем последняя ли страница
+                pages = data.get('pages', 0)
+                if page >= pages - 1:
+                    break
+
+                page += 1
+
+            print(f"Загружено вакансий от работодателя {employer_id}: {len(vacancies)}")
+            return vacancies
+
+        except Exception as e:
+            print(f"Ошибка при загрузке вакансий работодателя {employer_id}: {e}")
+            return []
